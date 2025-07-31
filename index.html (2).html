@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Advanced Weather App</title>
+  <style>
+    :root {
+      --bg: #1e1b2d;
+      --text: #fff;
+      --card: #333;
+    }
+    body.light {
+      --bg: #ebf5ff;
+      --text: #111;
+      --card: #fff;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 0;
+      transition: background 0.4s, color 0.4s;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      padding: 20px;
+      text-align: center;
+    }
+    .toggle-theme, .unit-toggle {
+      margin: 10px;
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid var(--text);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .search {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .search input {
+      padding: 10px;
+      width: 60%;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    .search button {
+      padding: 10px 15px;
+      border-radius: 5px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    .weather, .forecast {
+      margin-top: 20px;
+      background: var(--card);
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    .weather img, .forecast img {
+      width: 80px;
+    }
+    .forecast-day {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid #555;
+      padding: 10px 0;
+      align-items: center;
+    }
+    .bg-clear { background: url('https://source.unsplash.com/1600x900/?sunny') no-repeat center/cover; }
+    .bg-rain { background: url('https://source.unsplash.com/1600x900/?rain') no-repeat center/cover; }
+    .bg-clouds { background: url('https://source.unsplash.com/1600x900/?cloudy') no-repeat center/cover; }
+    .bg-snow { background: url('https://source.unsplash.com/1600x900/?snow') no-repeat center/cover; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <button class="toggle-theme">Toggle Theme</button>
+  <button class="unit-toggle">Switch to °F</button>
+  <div class="search">
+    <input type="text" placeholder="Enter city name">
+    <button>Search</button>
+  </div>
+  <div class="weather"></div>
+  <div class="forecast"></div>
+</div>
+
+<script>
+const apiKey = "8c6b365d79c5c0ae416d87de90a6e6c7";
+let unit = "metric";
+let currentCity = "";
+
+const weatherDiv = document.querySelector(".weather");
+const forecastDiv = document.querySelector(".forecast");
+const searchBtn = document.querySelector(".search button");
+const searchInput = document.querySelector(".search input");
+const toggleTheme = document.querySelector(".toggle-theme");
+const unitToggle = document.querySelector(".unit-toggle");
+
+function setBackground(weather) {
+  document.body.classList.remove("bg-clear", "bg-rain", "bg-clouds", "bg-snow");
+  if (weather.includes("Clear")) document.body.classList.add("bg-clear");
+  else if (weather.includes("Rain")) document.body.classList.add("bg-rain");
+  else if (weather.includes("Cloud")) document.body.classList.add("bg-clouds");
+  else if (weather.includes("Snow")) document.body.classList.add("bg-snow");
+}
+
+function formatTime(unix, offset) {
+  const local = new Date((unix + offset) * 1000);
+  return local.toUTCString().match(/\d{2}:\d{2}/)[0];
+}
+
+function renderCurrent(data, airData) {
+  const { name, main, weather, wind, sys, timezone } = data;
+  const sunrise = formatTime(sys.sunrise, timezone);
+  const sunset = formatTime(sys.sunset, timezone);
+
+  const aqi = airData?.list?.[0]?.main?.aqi;
+  const aqiText = aqi ? ["Good", "Fair", "Moderate", "Poor", "Very Poor"][aqi - 1] : "Unknown";
+
+  setBackground(weather[0].main);
+  weatherDiv.innerHTML = `
+    <h2>${name}</h2>
+    <img src="https://openweathermap.org/img/wn/${weather[0].icon}@2x.png" onerror="this.src='fallback.png'">
+    <p><strong>${Math.round(main.temp)}°${unit === 'metric' ? 'C' : 'F'}</strong></p>
+    <p>${weather[0].description}</p>
+    <p>Humidity: ${main.humidity}% | Wind: ${wind.speed} ${unit === 'metric' ? 'm/s' : 'mph'}</p>
+    <p>🌅 Sunrise: ${sunrise} | 🌇 Sunset: ${sunset}</p>
+    <p>🌫 Air Quality: ${aqiText}</p>
+  `;
+}
+
+function renderForecast(data) {
+  const days = {};
+  data.list.forEach(item => {
+    const day = new Date(item.dt_txt).toDateString();
+    if (!days[day]) days[day] = item;
+  });
+
+  forecastDiv.innerHTML = `<h3>5-Day Forecast</h3>` +
+    Object.keys(days).slice(0, 5).map(day => {
+      const item = days[day];
+      return `
+        <div class="forecast-day">
+          <div>${new Date(item.dt_txt).toLocaleDateString()}</div>
+          <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png">
+          <div>${Math.round(item.main.temp)}°${unit === 'metric' ? 'C' : 'F'}</div>
+          <div>💨 ${item.wind.speed} ${unit === 'metric' ? 'm/s' : 'mph'}</div>
+        </div>
+      `;
+    }).join("");
+}
+
+async function getAirQuality(lat, lon) {
+  try {
+    const res = await fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${apiKey}`);
+    return res.ok ? res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function getWeather(city) {
+  currentCity = city;
+  try {
+    const currentRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=${unit}`);
+    const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=${unit}`);
+    if (!currentRes.ok || !forecastRes.ok) throw new Error("City not found");
+
+    const currentData = await currentRes.json();
+    const forecastData = await forecastRes.json();
+    const airData = await getAirQuality(currentData.coord.lat, currentData.coord.lon);
+
+    renderCurrent(currentData, airData);
+    renderForecast(forecastData);
+  } catch (e) {
+    alert("City not found or API error.");
+  }
+}
+
+searchBtn.addEventListener("click", () => {
+  const city = searchInput.value.trim();
+  if (city) getWeather(city);
+});
+
+toggleTheme.addEventListener("click", () => {
+  document.body.classList.toggle("light");
+});
+
+unitToggle.addEventListener("click", () => {
+  unit = unit === "metric" ? "imperial" : "metric";
+  unitToggle.textContent = `Switch to °${unit === 'metric' ? 'F' : 'C'}`;
+  if (currentCity) getWeather(currentCity);
+});
+
+window.addEventListener("load", () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=${unit}`);
+      const data = await res.json();
+      getWeather(data.name);
+    });
+  }
+});
+</script>
+</body>
+</html>
